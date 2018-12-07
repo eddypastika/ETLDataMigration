@@ -96,7 +96,7 @@ public class DataMigrationConfiguration extends DefaultBatchConfigurer {
 	}
 	
 	@Bean
-	public JdbcCursorItemReader<TcashSubcription> reader(DataSource dataSource){
+	public JdbcCursorItemReader<TcashSubcription> readerExtract(DataSource dataSource){
 		JdbcCursorItemReader<TcashSubcription> databaseReader = new JdbcCursorItemReader<>();
 		databaseReader.setDataSource(dataSource);
 		databaseReader.setSql(QUERY_FIND_TCASH_SUBSCRIPTION);
@@ -106,12 +106,12 @@ public class DataMigrationConfiguration extends DefaultBatchConfigurer {
 	}
 	
 	@Bean
-	public DataMigrationProcessor processor() {
+	public DataMigrationProcessor processorExtract() {
 		return new DataMigrationProcessor();
 	}
 	
 	@Bean
-	public FlatFileItemWriter<TcashSubcription> writer(){
+	public FlatFileItemWriter<TcashSubcription> writerExtract(){
 		FlatFileItemWriter<TcashSubcription> csvWriter = new FlatFileItemWriter<>();
 		csvWriter.setResource(outputPath);
 		csvWriter.setAppendAllowed(true);
@@ -126,11 +126,11 @@ public class DataMigrationConfiguration extends DefaultBatchConfigurer {
 	}
 	
 	@Bean
-	public Step step1() {
+	public Step stepExtract1() {
 		return stepBuilderFactory.get("step1").<TcashSubcription, TcashSubcription> chunk(5000)
-				.reader(reader(reflexDB0DataSource))
-				.processor(processor())
-				.writer(writer())
+				.reader(readerExtract(reflexDB0DataSource))
+				.processor(processorExtract())
+				.writer(writerExtract())
 				.build();
 		
 	}
@@ -139,7 +139,7 @@ public class DataMigrationConfiguration extends DefaultBatchConfigurer {
 	public Job extractJob() {
 		return jobBuilderFactory.get("extractJob")
 				.incrementer(new RunIdIncrementer())
-				.flow(step1())
+				.flow(stepExtract1())
 				.end()
 				.build();
 	}
