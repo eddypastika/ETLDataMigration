@@ -18,7 +18,9 @@ public class DataSourceConfiguration {
 	
 	@Autowired
 	private Environment environment;
-	
+
+
+	// SOURCE
 	@Bean
 	@Primary
 	@ConfigurationProperties("source.reflex.db0.datasource")
@@ -27,13 +29,30 @@ public class DataSourceConfiguration {
 	}
 	
 	@Bean("reflexDB0DataSource")
-	@Primary
 	@ConfigurationProperties(prefix = "source.reflex.db0.datasource")
 	public DataSource reflexDB0DataSource() {
 		DataSource dataSource = dbPropertiesReflexDB0()
 				.initializeDataSourceBuilder()
 				.build();
 		
+		return dataSource;
+	}
+
+	// TARGET
+	@Bean
+	@ConfigurationProperties("target.c2p.even.datasource")
+	public DataSourceProperties dbPropertiesC2P(){
+		return new DataSourceProperties();
+	}
+
+	@Bean("targetC2PDataSource")
+	@Primary
+	@ConfigurationProperties(prefix = "target.c2p.even.datasource")
+	public DataSource targetC2PDataSource(){
+		DataSource dataSource = dbPropertiesC2P()
+				.initializeDataSourceBuilder()
+				.build();
+
 		return dataSource;
 	}
 }

@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobExecutionListener;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * Created by Eddy Pastika.
  * User: ig.eddy.p.putra
@@ -30,7 +32,8 @@ public class JobDurationCalculationListener implements JobExecutionListener {
 
         long endTime = System.currentTimeMillis();
         long duration = endTime - startTime;
+        long inSecond = TimeUnit.MILLISECONDS.toSeconds(duration);
 
-        logger.info("Job duration. parameters: {} time: {}", jobExecution.getJobParameters().getParameters(), duration);
+        logger.info("Job duration. parameters: {} time(second): {}", jobExecution.getJobParameters().getParameters(), inSecond);
     }
 }

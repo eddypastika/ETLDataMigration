@@ -8,6 +8,8 @@ import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.StepExecutionListener;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * Created by Eddy Pastika.
  * User: ig.eddy.p.putra
@@ -30,7 +32,8 @@ public class StepDurationCalculationListener implements StepExecutionListener {
     public ExitStatus afterStep(StepExecution stepExecution) {
         long endTime = System.currentTimeMillis();
         long duration = endTime - startTime;
-        logger.info("Step duration. step name: {} time: {}", stepExecution.getStepName(), duration);
+        long inSecond = TimeUnit.MILLISECONDS.toSeconds(duration);
+        logger.info("Step duration. step name: {} time(second): {}", stepExecution.getStepName(), inSecond);
         return stepExecution.getExitStatus();
     }
 }

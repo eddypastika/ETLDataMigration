@@ -2,17 +2,20 @@ package com.eddypastika.migration.configuration;
 
 import javax.sql.DataSource;
 
+import com.eddypastika.migration.listener.JobDurationCalculationListener;
+import com.eddypastika.migration.listener.StepDurationCalculationListener;
+import com.eddypastika.migration.model.Counter;
+import com.eddypastika.migration.tasklet.TransformLoadTargetTasklet;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
-import org.springframework.batch.core.configuration.annotation.DefaultBatchConfigurer;
-import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
-import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
-import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.*;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.launch.support.SimpleJobLauncher;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
+import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
@@ -49,9 +52,16 @@ public class DataMigrationConfiguration extends DefaultBatchConfigurer {
 	@Autowired
 	@Qualifier("reflexDB0DataSource")
 	private DataSource reflexDB0DataSource;
+
+	@Autowired
+	@Qualifier("targetC2PDataSource")
+	private DataSource targetC2PDataSource;
 	
 	@Value("${source.reflex.scheme}")
 	private String reflexSchemeName;
+
+	@Value("${target.c2p.scheme}")
+	private String targetSchemeName;
 	
 	@Autowired
 	private JobBuilderFactory jobBuilderFactory;
@@ -62,7 +72,7 @@ public class DataMigrationConfiguration extends DefaultBatchConfigurer {
 	@Autowired
 	private JobRepository jobRepository;
 	
-	private Resource outputPath = new FileSystemResource("output/tcash_subscription.csv");
+	//private Resource outputPath = new FileSystemResource("output/tcash_subscription.csv");
 	
 	@Bean
     @Transactional(isolation=Isolation.READ_COMMITTED)
@@ -90,9 +100,14 @@ public class DataMigrationConfiguration extends DefaultBatchConfigurer {
 			+ "FROM belajar.tcash_subscription ";
 
 	
+//	@Bean
+//	public TcashSubscriptionDao tcashSubscriptionDao() {
+//		return new TcashSubscriptionDaoImpl(targetC2PDataSource, targetSchemeName);
+//	}
+
 	@Bean
-	public TcashSubscriptionDao tcashSubscriptionDao() {
-		return new TcashSubscriptionDaoImpl(reflexDB0DataSource, reflexSchemeName);
+	public TcashSubscriptionDaoImpl tcashSubscriptionDaoTransfomLoadTarget() {
+		return new TcashSubscriptionDaoImpl(targetC2PDataSource, targetSchemeName);
 	}
 	
 	@Bean
@@ -111,36 +126,57 @@ public class DataMigrationConfiguration extends DefaultBatchConfigurer {
 	}
 	
 	@Bean
-	public FlatFileItemWriter<TcashSubcription> writerExtract(){
-		FlatFileItemWriter<TcashSubcription> csvWriter = new FlatFileItemWriter<>();
-		csvWriter.setResource(outputPath);
-		csvWriter.setAppendAllowed(true);
-		csvWriter.setLineAggregator(new DelimitedLineAggregator<TcashSubcription>() {{
-			setDelimiter("|");
-			setFieldExtractor(new BeanWrapperFieldExtractor<TcashSubcription>() {{
-				setNames(new String[] {"msisdn", "category", "product_id", "counter", "end_date", "reset_date"});
-			}});
-		}});
+	public JdbcBatchItemWriter<TcashSubcription> writerExtract(){
+//		FlatFileItemWriter<TcashSubcription> csvWriter = new FlatFileItemWriter<>();
+//		csvWriter.setResource(outputPath);
+//		csvWriter.setAppendAllowed(true);
+//		csvWriter.setLineAggregator(new DelimitedLineAggregator<TcashSubcription>() {{
+//			setDelimiter("|");
+//			setFieldExtractor(new BeanWrapperFieldExtractor<TcashSubcription>() {{
+//				setNames(new String[] {"msisdn", "category", "product_id", "counter", "end_date", "reset_date"});
+//			}});
+//		}});
+
+		JdbcBatchItemWriter<TcashSubcription> writerToStaging = new JdbcBatchItemWriter<>();
+		writerToStaging.setDataSource(targetC2PDataSource);
+		writerToStaging.setSql("INSERT INTO tcash_subscription VALUES (:msisdn , :category , :product_id , :counter , :end_date , :reset_date)");
+		writerToStaging.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<TcashSubcription>());
 		
-		return csvWriter;
+		return writerToStaging;
 	}
 	
 	@Bean
-	public Step stepExtract1() {
+	public Step step1Extract() {
 		return stepBuilderFactory.get("step1").<TcashSubcription, TcashSubcription> chunk(5000)
 				.reader(readerExtract(reflexDB0DataSource))
 				.processor(processorExtract())
 				.writer(writerExtract())
+				.listener(new StepDurationCalculationListener())
 				.build();
 		
+	}
+
+	// TASKLET (STEP 2)
+	@Bean
+	@StepScope
+	public TransformLoadTargetTasklet transformLoadTargetTasklet(){
+		return new TransformLoadTargetTasklet(tcashSubscriptionDaoTransfomLoadTarget());
+	}
+
+	@Bean
+	public Step step2TransformLoadTarget(){
+		return  stepBuilderFactory.get("step2TransformLoadTarget")
+				.tasklet(transformLoadTargetTasklet())
+				.build();
 	}
 	
 	@Bean
 	public Job extractJob() {
 		return jobBuilderFactory.get("extractJob")
 				.incrementer(new RunIdIncrementer())
-				.flow(stepExtract1())
-				.end()
+				.start(step1Extract())
+				.next(step2TransformLoadTarget())
+				.listener(new JobDurationCalculationListener())
 				.build();
 	}
 	
